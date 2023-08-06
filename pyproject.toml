@@ -1,0 +1,33 @@
+[project]
+name = "crawler"
+version = "1.0.0"
+description = "A simple webcrawler"
+readme = "README.md"
+requires-python = ">=3.11"
+
+authors = [
+  {name = "James Bungard", email = "jmbungard@gmail.com" } # Optional
+]
+
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3.11",
+]
+
+dependencies = [
+  "requests",
+  "beautifulsoup4"
+]
+
+[project.scripts]
+crawler = "crawler.crawler:main"
+
+[build-system]
+build-backend = "setuptools.build_meta"
+
+requires = [
+  "setuptools>=61.0",
+  "wheel"
+]
