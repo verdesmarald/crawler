@@ -15,6 +15,7 @@ import queue
 from multiprocessing import Queue, JoinableQueue
 from typing import List
 from urllib.parse import urljoin, urlparse
+from urllib.robotparser import RobotFileParser
 
 from crawler import worker
 
@@ -25,6 +26,7 @@ def main() -> None:
     This function sets up the worker processes, queues URLs to be crawled,
     and processes crawl results, avoiding duplicate page vists.
     '''
+    ua = 'simplecrawler/1.0.0'
     logging.basicConfig(level=logging.INFO)
     in_queue = JoinableQueue()
     out_queue = Queue()
@@ -32,40 +34,47 @@ def main() -> None:
 
     args = parse_args()
 
-    in_queue.put(args.start_url)
-    seen.add(get_path(args.start_url))
+    robot_parser = get_robot_parser(args.start_url)
+    if not robot_parser.can_fetch(ua, args.start_url):
+        print(f'Crawling {args.start_url} disallowed by robots.txt')
+    else:
+        in_queue.put(args.start_url)
+        seen.add(get_path(args.start_url))
 
-    _workers = [
-        worker.start_worker(i, in_queue, out_queue, args.timeout)
-        for i in range(args.num_workers)
-    ]
-    print(f'Started {args.num_workers} workers')
-    while True:
-        try:
-            # Block waiting for a result from any worker
-            result: worker.Result = out_queue.get(timeout=args.timeout)
-            for link in process_result(result):
-                if get_path(link) not in seen:
-                    seen.add(get_path(link))
-                    in_queue.put(link)
-        except queue.Empty:
-            if not in_queue.empty():
-                # Wait a little longer if the in_queue is not empty,
-                # if there are still no results after that something has gone wrong
-                time.sleep(2*args.timeout)
-                if out_queue.empty():
-                    print('Processing is hung, exiting')
-                    break
-            else:
-                # Wait for any remaining in-progress tasks to complete,
-                # then exit if the out_queue is still empty
-                in_queue.join()
-                if out_queue.empty():
-                    break
-        except KeyboardInterrupt:
-            break
-        except Exception as ex: #pylint:disable=broad-exception-caught
-            logging.exception(ex)
+        _workers = [
+            worker.start_worker(i, in_queue, out_queue, args.timeout)
+            for i in range(args.num_workers)
+        ]
+        print(f'Started {args.num_workers} workers')
+        while True:
+            try:
+                # Block waiting for a result from any worker
+                result: worker.Result = out_queue.get(timeout=args.timeout)
+                for link in process_result(result):
+                    if get_path(link) not in seen:
+                        seen.add(get_path(link))
+                        if robot_parser.can_fetch(ua, link):
+                            in_queue.put(link)
+                        else:
+                            logging.info(f'Skipping {link} due to robots.txt')
+            except queue.Empty:
+                if not in_queue.empty():
+                    # Wait a little longer if the in_queue is not empty,
+                    # if there are still no results after that something has gone wrong
+                    time.sleep(2*args.timeout)
+                    if out_queue.empty():
+                        print('Processing is hung, exiting')
+                        break
+                else:
+                    # Wait for any remaining in-progress tasks to complete,
+                    # then exit if the out_queue is still empty
+                    in_queue.join()
+                    if out_queue.empty():
+                        break
+            except KeyboardInterrupt:
+                break
+            except Exception as ex: #pylint:disable=broad-exception-caught
+                logging.exception(ex)
 
     if not in_queue.empty():
         print('Emptying work queue')
@@ -76,6 +85,14 @@ def main() -> None:
 
     print(f'Crawled {len(seen)} distinct pages')
     print('Done!')
+
+def get_robot_parser(start_url) -> RobotFileParser:
+    '''Get and parse the robots.txt file if present'''    
+    robot_parser = RobotFileParser()
+    robot_parser.set_url(urljoin(start_url, '/robots.txt'))
+    robot_parser.read()
+    return robot_parser
+
 
 def parse_args() -> argparse.Namespace:
     '''Parses comand-line arguments to the crawler'''
@@ -94,7 +111,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         '-t', '--timeout',
         type=float,
-        default=2,
+        default=10,
         help='Timeout (in seconds) when requesting each page.'
     )
     return parser.parse_args()
