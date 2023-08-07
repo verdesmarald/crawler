@@ -8,14 +8,7 @@ from urllib.parse import urljoin, urlparse
 from typing import List
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description='A simple webcrawler')
-    parser.add_argument(
-        'root_domain',
-        help='The root domain to crawl. This crawler will not crawl links ' \
-             'outside this domain, including subdomains.'
-    )
-
-    args = parser.parse_args()
+    args = parse_args()
     visited = set()
     to_crawl = Queue()
     to_crawl.put(args.root_domain)
@@ -33,15 +26,28 @@ def main() -> None:
 
         visited.add(_get_path(url))
 
+    print(f'Crawled {len(visited)} distinct pages')
+    print('Done!')
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description='A simple webcrawler')
+    parser.add_argument(
+        'root_domain',
+        help='The root domain to crawl. This crawler will not crawl links ' \
+             'outside this domain, including subdomains.'
+    )
+    return parser.parse_args()
+
+
 def crawl(url: str) -> List[str]:
     to_crawl = []
+    response = requests.get(url, headers={'user-agent': 'simplecrawler/1.0.0'}, stream=True)
 
-    response = requests.get(url, headers={'user-agent': 'simplecrawler/1.0.0'})
     if response.status_code != 200:
         print(f'\tRequest for: {url} failed with response code {response.status_code}')
         return []
     
-    if response.headers['content-type'] != 'text/html':
+    if not 'text/html' in response.headers['content-type']:
         print(f'\tRequest for {url} returned non-HTML content of type: {response.headers["content-type"]}')
         return[]
     
