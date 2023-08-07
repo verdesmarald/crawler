@@ -115,12 +115,12 @@ def process_result(result: worker.Result) -> List[str]:
 
     if result.response_status != 200:
         logging.error(f'Request for: {result.crawled_url} failed with '\
-                      'response code {result.response_status}')
+                      f'response code {result.response_status}')
         return []
 
     if not 'text/html' in result.response_type:
         logging.info(f'Request for {result.crawled_url} returned non-HTML '\
-                     'content of type: {result.response_type}')
+                     f'content of type: {result.response_type}')
         return []
 
     follow_host = get_host(result.crawled_url)
@@ -128,7 +128,7 @@ def process_result(result: worker.Result) -> List[str]:
     for link in result.links_found:
         # Convert from relative to absolute url if needed
         link_url = urljoin(result.crawled_url, link)
-        #print(f'\tFound link: {link_url}')
+        print(f'\tFound link: {link_url}')
         if get_host(link_url) == follow_host:
             to_crawl.append(link_url)
 
