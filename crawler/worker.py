@@ -19,6 +19,7 @@ class Result:
     response_status: int
     response_type: str
     links_found: List[str]
+    meta_robots: str
 
 
 def start_worker(name: int, in_queue: JoinableQueue, out_queue: Queue, timeout: float) -> Process:
@@ -53,7 +54,8 @@ def _run(in_queue: JoinableQueue, out_queue: Queue, timeout: float) -> None:
                 error=True,
                 response_status=0,
                 response_type='',
-                links_found=[]
+                links_found=[],
+                meta_robots=''
             )
             out_queue.put(result)
         finally:
@@ -75,12 +77,16 @@ def crawl(url: str, timeout: float) -> Result:
         crawled_url=url,
         error=False,
         response_status=response.status_code,
-        response_type=response.headers['content-type'],
+        response_type=response.headers.get('content-type', ''),
+        meta_robots=response.headers.get('x-robots-tag', ''),
         links_found=[]
     )
 
     if result.response_status == 200 and 'text/html' in result.response_type:
         html = BeautifulSoup(response.content, features='html.parser')
         result.links_found=[link.get('href') for link in html.find_all('a')]
+        robots = html.find('meta', attrs= {'name': 'robots'})
+        if robots:
+            result.meta_robots = robots['content']
 
     return result

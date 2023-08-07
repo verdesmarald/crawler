@@ -49,7 +49,8 @@ def test_exclude_duplicates(mocker):
                 'page2',
                 'http://example.com/page2',
                 'http://example.com/page2/'
-            ]
+            ],
+            ''
         ),
         queue.Empty()
     ]
@@ -81,3 +82,14 @@ def test_relative_link_handling(mocker):
         'http://example.com/foo?bar=baz',
         'http://example.com#anchor'
     ]
+
+def test_no_follow(mocker):
+    '''Crawler should respect robots meta-directive and not follow links'''
+    get = mocker.patch('requests.get')
+    get.return_value = _generate_test_response(200, 'text/html', 'data/meta_robots.html')
+    result = worker.crawl('http://example.com', 5)
+    links = crawler.process_result(result)
+    assert links == []
+
+def test_robots_txt(mocker):
+    '''Crawler should respect robots.txt and not crawl specified paths'''

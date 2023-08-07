@@ -125,12 +125,16 @@ def process_result(result: worker.Result) -> List[str]:
 
     follow_host = get_host(result.crawled_url)
     to_crawl = []
-    for link in result.links_found:
-        # Convert from relative to absolute url if needed
-        link_url = urljoin(result.crawled_url, link)
-        print(f'\tFound link: {link_url}')
-        if get_host(link_url) == follow_host:
-            to_crawl.append(link_url)
+
+    if 'nofollow' in result.meta_robots or 'none' in result.meta_robots:
+        logging.info(f'Skipping links from {result.crawled_url} due to robots meta-directive')
+    else:
+        for link in result.links_found:
+            # Convert from relative to absolute url if needed
+            link_url = urljoin(result.crawled_url, link)
+            print(f'\tFound link: {link_url}')
+            if get_host(link_url) == follow_host:
+                to_crawl.append(link_url)
 
     return to_crawl
 

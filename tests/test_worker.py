@@ -60,3 +60,13 @@ def test_non_200_response(mocker):
         assert result.response_status == response_code
         assert result.response_type == 'text/html'
         assert not result.links_found
+
+def test_meta_robots(mocker):    
+    get = mocker.patch('requests.get')
+    get.return_value = _generate_test_response(200, 'text/html', 'data/meta_robots.html')
+    result = worker.crawl('http://example.com', 5)
+    assert result.meta_robots == 'noindex, nofollow, nosnippet'
+    
+    get.return_value = _generate_test_response(200, 'text/html', 'data/test.html')
+    result = worker.crawl('http://example.com', 5)
+    assert result.meta_robots == ''
