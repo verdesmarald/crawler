@@ -1,3 +1,12 @@
+'''
+This is a simple webcrawler. Starting from the specified start_page, it will
+find and print all links, then continue crawling any linked pages that are
+on the same subdomain as the start_page.
+
+Links to other domains or subdomains, and links to non-HTML resources are
+printed but not followed by this tool.
+'''
+
 import argparse
 import logging
 import time
@@ -10,17 +19,23 @@ from urllib.parse import urljoin, urlparse
 from crawler import worker
 
 def main() -> None:
+    '''
+    Entry point for the crawler
+    
+    This function sets up the worker processes, queues URLs to be crawled,
+    and processes crawl results, avoiding duplicate page vists.
+    '''
     logging.basicConfig(level=logging.INFO)
-    in_queue = JoinableQueue()    
+    in_queue = JoinableQueue()
     out_queue = Queue()
     seen = set()
 
     args = parse_args()
-    
+
     in_queue.put(args.start_url)
     seen.add(get_path(args.start_url))
 
-    workers = [
+    _workers = [
         worker.start_worker(i, in_queue, out_queue, args.timeout)
         for i in range(args.num_workers)
     ]
@@ -47,10 +62,10 @@ def main() -> None:
                 in_queue.join()
                 if out_queue.empty():
                     break
-        except KeyboardInterrupt:  
+        except KeyboardInterrupt:
             break
-        except Exception as e:
-            logging.exception(e)
+        except Exception as ex: #pylint:disable=broad-exception-caught
+            logging.exception(ex)
 
     if not in_queue.empty():
         print('Emptying work queue')
@@ -58,11 +73,12 @@ def main() -> None:
             in_queue.get()
             in_queue.task_done()
         in_queue.join()
-        
+
     print(f'Crawled {len(seen)} distinct pages')
     print('Done!')
 
 def parse_args() -> argparse.Namespace:
+    '''Parses comand-line arguments to the crawler'''
     parser = argparse.ArgumentParser(description = 'A simple webcrawler')
     parser.add_argument(
         'start_url',
@@ -84,6 +100,13 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 def process_result(result: worker.Result) -> List[str]:
+    '''
+    Processes the results of a single page crawl.
+    
+    This includes outputting the links that were found, logging failed
+    requests and non-HTML resources, and converting all relative URLs
+    to absolute URLs.
+    '''
     print(f'Crawled {result.crawled_url}')
 
     if result.error:
@@ -91,27 +114,42 @@ def process_result(result: worker.Result) -> List[str]:
         return []
 
     if result.response_status != 200:
-        logging.error(f'Request for: {result.crawled_url} failed with response code {result.response_status}')
+        logging.error(f'Request for: {result.crawled_url} failed with '\
+                      'response code {result.response_status}')
         return []
-        
+
     if not 'text/html' in result.response_type:
-        logging.info(f'Request for {result.crawled_url} returned non-HTML content of type: {result.response_type}')
+        logging.info(f'Request for {result.crawled_url} returned non-HTML '\
+                     'content of type: {result.response_type}')
         return []
-    
+
     follow_host = get_host(result.crawled_url)
     to_crawl = []
     for link in result.links_found:
-        link_url = urljoin(result.crawled_url, link) # Convert from relative to absolute url if needed
+        # Convert from relative to absolute url if needed
+        link_url = urljoin(result.crawled_url, link)
         #print(f'\tFound link: {link_url}')
         if get_host(link_url) == follow_host:
-           to_crawl.append(link_url)
-        
+            to_crawl.append(link_url)
+
     return to_crawl
 
 def get_host(url: str) -> str:
+    '''
+    Gets the hostname component from a URL
+    
+    e.g. given https://example.com/some/path?query#anchor,
+    returns example.com
+    '''
     return urlparse(url).hostname
 
 def get_path(url: str) -> str:
+    '''
+    Gets the path component from a URL, adding a trailing / if missing
+
+    e.g. given https://example.com/some/path?query#anchor,
+    returns some/path/
+    '''
     path = urlparse(url).path
     if not path.endswith('/'):
         path += '/'

@@ -1,3 +1,5 @@
+'''Tests for the crawler module.'''
+
 import pathlib
 import queue
 
@@ -8,21 +10,23 @@ from crawler import crawler, worker
 
 @dataclass
 class MockResponse:
+    '''Mock HTTP response'''
     status_code: int
     headers: Dict[str, str]
     content: str
 
 @dataclass
 class MockArgs:
+    '''Mock command line args'''
     start_url: str
     num_workers: int
     timeout: float
 
 def _generate_test_response(status_code: int, content_type: str, content_path: str):
     content_path = pathlib.Path(__file__).parent.resolve().joinpath(content_path)
-    with open(content_path, 'r') as f:
-        content = f.read()
-    
+    with open(content_path, 'r', encoding='UTF-8') as handle:
+        content = handle.read()
+
     return MockResponse(status_code, {'content-type': content_type}, content)
 
 def test_exclude_duplicates(mocker):
@@ -36,7 +40,7 @@ def test_exclude_duplicates(mocker):
             False,
             200,
             'text/html',
-            [            
+            [
                 'http://example.com',
                 'http://example.com/page1',
                 'page1',
@@ -51,7 +55,7 @@ def test_exclude_duplicates(mocker):
     ]
     crawler.parse_args.return_value = MockArgs('http://example.com', 0, 0)
     crawler.main()
-    
+
     assert len(mock_in_queue.put.mock_calls) == 3
     mock_in_queue.put.has_any_call('http://example.com')
     mock_in_queue.put.has_any_call('http://example.com/page1')
@@ -60,7 +64,7 @@ def test_exclude_duplicates(mocker):
 def test_same_subdomain_only(mocker):
     '''Verifies that links outside of the starting pages subdomain are excluded from crawling'''
     get = mocker.patch('requests.get')
-    get.return_value = _generate_test_response(200, 'text/html', 'data/test_same_subdomain_only.html')
+    get.return_value = _generate_test_response(200, 'text/html', 'data/same_subdomain_only.html')
     result = worker.crawl('http://example.com', 5)
     links = crawler.process_result(result)
     assert links == ['http://example.com/page1']
@@ -68,7 +72,7 @@ def test_same_subdomain_only(mocker):
 def test_relative_link_handling(mocker):
     '''Verifies that relative links are converted to absolute URLs on the same subdomain'''
     get = mocker.patch('requests.get')
-    get.return_value = _generate_test_response(200, 'text/html', 'data/test_relative_link_handling.html')
+    get.return_value = _generate_test_response(200, 'text/html', 'data/relative_link_handling.html')
     result = worker.crawl('http://example.com', 5)
     links = crawler.process_result(result)
     assert links == [
@@ -77,4 +81,3 @@ def test_relative_link_handling(mocker):
         'http://example.com/foo?bar=baz',
         'http://example.com#anchor'
     ]
-

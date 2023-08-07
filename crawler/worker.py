@@ -1,15 +1,19 @@
-
+'''
+A simple worker process to pull URLs to be crawled from a queue and
+perform the actual HTTP requests.
+'''
 import logging
-import requests
 import signal
-
-from bs4 import BeautifulSoup
 from dataclasses import dataclass
 from multiprocessing import Process, Queue, JoinableQueue
 from typing import List
 
+import requests
+from bs4 import BeautifulSoup
+
 @dataclass
 class Result:
+    '''Results of a single page crawl'''
     crawled_url: str
     error: bool
     response_status: int
@@ -17,29 +21,33 @@ class Result:
     links_found: List[str]
 
 
-def start_worker(id: int, in_queue: JoinableQueue, out_queue: Queue, timeout: float) -> Process:
+def start_worker(name: int, in_queue: JoinableQueue, out_queue: Queue, timeout: float) -> Process:
+    '''
+    Starts a new worker process that consumes URLs to crawl from
+    in_queue and publishes crawl results to out_queue.
+    '''
     worker = Process(
-        target=run,
-        name=str(id),
+        target=_run,
+        name=str(name),
         args=(in_queue, out_queue, timeout),
         daemon=True
     )
     worker.start()
     return worker
 
-def run(in_queue: JoinableQueue, out_queue: Queue, timeout: float) -> None:
+def _run(in_queue: JoinableQueue, out_queue: Queue, timeout: float) -> None:
     # Ignore keyboard interrupt in worker processes
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
     while True:
+        got_item = False
         try:
-            got_item = False
             url = in_queue.get() # This call blocks until work is available
             got_item = True
             result = crawl(url, timeout)
             out_queue.put(result)
-        except Exception as e:
-            logging.exception(e)
+        except Exception as ex: # pylint:disable=broad-exception-caught
+            logging.exception(ex)
             result = Result(
                 crawled_url=url,
                 error=True,
@@ -53,6 +61,7 @@ def run(in_queue: JoinableQueue, out_queue: Queue, timeout: float) -> None:
                 in_queue.task_done()
 
 def crawl(url: str, timeout: float) -> Result:
+    '''Crawls the specified URL.'''
     response = requests.get(
         url,
         headers={'user-agent': 'simplecrawler/1.0.0'},
